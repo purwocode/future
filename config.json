@@ -9,6 +9,6 @@
     "BNBUSDT": 75
 
   },
-  "telegram_token": "7343242058:AAFAPokz2rYojvHukGcLD-Ds8M_kkuazIVs",
-  "telegram_chat_id": "7043085742"
+  "telegram_token": "TOKEN_BOT",
+  "telegram_chat_id": "CHAT_ID"
 }
