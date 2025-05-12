@@ -1,4 +1,4 @@
-import time
+import time 
 import json
 import threading
 import requests
@@ -13,13 +13,12 @@ with open('config.json') as f:
 
 symbols = config['symbols']
 qty_usdt = config['qty_usdt']
-leverage = config['leverage']
 telegram_token = config['telegram_token']
 telegram_chat_id = config['telegram_chat_id']
 
 # Inisialisasi client Binance
-client = Client(api_key='BINANCE_APIKEY',
-                api_secret='BINANCE_APIKEY_SECRET')
+client = Client(api_key='Vwyo2haf69P3VNyPUAzUfcC2IpOVikd2ghvQo73rPxeZZ9KNsrK7qYBC65IK4bkC',
+                api_secret='vfCiCQFsLIShMqbjko8TC5rIJlFnSflhTJW4h35hsMwqPJKvXxPHLFyNtCgdOCra')
 
 def send_telegram_message(message):
     url = f'https://api.telegram.org/bot{telegram_token}/sendMessage'
@@ -40,7 +39,7 @@ def get_current_price(symbol):
 def get_candlestick_data(symbol, interval='1m', limit=100):
     try:
         candles = client.futures_klines(symbol=symbol, interval=interval, limit=limit)
-        return np.array([[float(candle[1]), float(candle[4])] for candle in candles])  # Open and Close
+        return np.array([[float(candle[1]), float(candle[4]), float(candle[2]), float(candle[3]), float(candle[5])] for candle in candles])
     except Exception as e:
         print(f"Error fetching candles: {e}")
         return np.array([])
@@ -48,7 +47,7 @@ def get_candlestick_data(symbol, interval='1m', limit=100):
 def calculate_rsi(symbol, period=14):
     candles = get_candlestick_data(symbol)
     if candles.size == 0:
-        return 50  # netral jika data tidak ada
+        return 50
     close_prices = candles[:, 1]
     delta = np.diff(close_prices)
     gain = np.where(delta > 0, delta, 0)
@@ -56,8 +55,36 @@ def calculate_rsi(symbol, period=14):
     avg_gain = np.mean(gain[-period:])
     avg_loss = np.mean(loss[-period:])
     rs = avg_gain / avg_loss if avg_loss != 0 else 0
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
+    return 100 - (100 / (1 + rs))
+
+def calculate_ema(values, period):
+    return np.convolve(values, np.ones(period)/period, mode='valid')[-1]
+
+def bollinger_band_breakout(symbol):
+    candles = get_candlestick_data(symbol, limit=20)
+    if candles.shape[0] < 20:
+        return False, None
+    close_prices = candles[:, 1]
+    mean = np.mean(close_prices)
+    std = np.std(close_prices)
+    upper_band = mean + (2 * std)
+    lower_band = mean - (2 * std)
+    last_price = close_prices[-1]
+    if last_price > upper_band:
+        return True, 'BUY'
+    elif last_price < lower_band:
+        return True, 'SELL'
+    return False, None
+
+def get_max_leverage(symbol):
+    try:
+        info = client.futures_leverage_bracket(symbol=symbol)
+        if info:
+            brackets = info[0]['brackets']
+            return max(int(b['initialLeverage']) for b in brackets)
+    except Exception as e:
+        print(f"Error getting max leverage for {symbol}: {e}")
+    return 20
 
 def get_quantity_precision(symbol):
     try:
@@ -114,32 +141,22 @@ def get_price_precision(symbol):
         print(f"Error getting price precision: {e}")
     return 2
 
-def set_sl_tp(symbol, entry_price, side):
+# Fungsi untuk menghitung dan mengatur TP dan SL dengan rasio risk/reward 1:1.5
+def set_tp_and_sl_by_roi(symbol, entry_price, side, roi=0.01):
     try:
-        # Menghitung SL dan TP dengan rasio Risk:Reward 1:1.5
-        sl_price = entry_price * (1 - 0.003) if side == 'BUY' else entry_price * (1 + 0.003)
-        tp_price = entry_price * (1 + 0.0045) if side == 'BUY' else entry_price * (1 - 0.0045)
+        tp_price = entry_price * (0.5 + roi) if side == 'BUY' else entry_price * (0.5 - roi)
+        sl_price = entry_price * (0.5 - roi * 0.75) if side == 'BUY' else entry_price * (0.5 + roi * 0.75)
 
-        # Menyesuaikan harga SL dan TP sesuai dengan presisi harga
+        # Menyesuaikan harga TP dan SL dengan presisi harga
         price_precision = get_price_precision(symbol)
-        sl_price = round(sl_price, price_precision)
         tp_price = round(tp_price, price_precision)
+        sl_price = round(sl_price, price_precision)
 
-        # Menghitung qty yang disesuaikan berdasarkan ukuran posisi dan harga
-        qty = qty_usdt * leverage[symbol] / entry_price
+        # Menghitung qty untuk TP dan SL
+        qty = qty_usdt * get_max_leverage(symbol) / entry_price
         qty_adjusted = adjust_quantity(symbol, qty)
 
-        # Membuat order untuk Stop Loss (SL)
-        client.futures_create_order(
-            symbol=symbol,
-            side='SELL' if side == 'BUY' else 'BUY',
-            type=FUTURE_ORDER_TYPE_STOP_MARKET,
-            stopPrice=sl_price,
-            quantity=qty_adjusted,
-            positionSide='LONG' if side == 'BUY' else 'SHORT'
-        )
-
-        # Membuat order untuk Take Profit (TP)
+        # Membuat order TP
         client.futures_create_order(
             symbol=symbol,
             side='SELL' if side == 'BUY' else 'BUY',
@@ -150,10 +167,19 @@ def set_sl_tp(symbol, entry_price, side):
             positionSide='LONG' if side == 'BUY' else 'SHORT'
         )
 
-        # Mengirimkan pesan ke Telegram dengan informasi SL/TP yang telah diset
-        send_telegram_message(f"SL/TP for {symbol} set at SL: {sl_price}, TP: {tp_price}")
+        # Membuat order SL
+        client.futures_create_order(
+            symbol=symbol,
+            side='SELL' if side == 'BUY' else 'BUY',
+            type=FUTURE_ORDER_TYPE_STOP_MARKET,
+            stopPrice=sl_price,
+            quantity=qty_adjusted,
+            positionSide='LONG' if side == 'BUY' else 'SHORT'
+        )
+
+        send_telegram_message(f"TP for {symbol} set at {tp_price} (ROI {roi*100}%) and SL set at {sl_price}")
     except BinanceAPIException as e:
-        send_telegram_message(f"[ERROR] SL/TP error for {symbol}: {e.message}")
+        send_telegram_message(f"[ERROR] TP/SL error for {symbol}: {e.message}")
 
 def is_bullish_candle(symbol):
     candles = get_candlestick_data(symbol)
@@ -168,7 +194,10 @@ def execute_trade(symbol, side):
     if price is None:
         return
 
-    qty = qty_usdt * leverage[symbol] / price
+    max_leverage = get_max_leverage(symbol)
+    client.futures_change_leverage(symbol=symbol, leverage=max_leverage)
+
+    qty = qty_usdt * max_leverage / price
 
     if check_open_position(symbol) is not None:
         print(f"Position already open for {symbol}. Skipping trade.")
@@ -178,29 +207,33 @@ def execute_trade(symbol, side):
     order = place_market_order(symbol, side, qty)
     if order:
         send_telegram_message(f"{side} order for {symbol} placed at {price}")
-        set_sl_tp(symbol, price, side)
+        set_tp_and_sl_by_roi(symbol, price, side, roi=0.015)
 
 def main():
     while True:
         for symbol in symbols:
-            rsi = calculate_rsi(symbol)
-            print(f"{symbol} RSI: {rsi:.2f}")
+            try:
+                rsi = calculate_rsi(symbol)
+                candles = get_candlestick_data(symbol)
+                if candles.shape[0] < 50:
+                    continue
+                close_prices = candles[:, 1]
+                ema20 = calculate_ema(close_prices, 20)
+                ema50 = calculate_ema(close_prices, 50)
+                breakout, breakout_side = bollinger_band_breakout(symbol)
 
-            if rsi < 30 and is_bullish_candle(symbol):
-                execute_trade(symbol, 'BUY')
-            elif rsi > 70 and is_bearish_candle(symbol):
-                execute_trade(symbol, 'SELL')
-            else:
-                print(f"{symbol}: No trade signal")
+                print(f"{symbol} RSI: {rsi:.2f}, EMA20: {ema20:.2f}, EMA50: {ema50:.2f}")
 
+                if rsi < 30 and is_bullish_candle(symbol) and ema20 > ema50:
+                    execute_trade(symbol, 'BUY')
+                elif rsi > 70 and is_bearish_candle(symbol) and ema20 < ema50:
+                    execute_trade(symbol, 'SELL')
+                elif breakout:
+                    execute_trade(symbol, breakout_side)
+            except Exception as e:
+                send_telegram_message(f"Error in {symbol}: {str(e)}")
         time.sleep(30)
 
-def start_bot():
-    thread = threading.Thread(target=main)
-    thread.daemon = True
-    thread.start()
-
-if __name__ == '__main__':
-    start_bot()
-    while True:
-        time.sleep(1)
+# Main execution
+if __name__ == "__main__":
+    main()
