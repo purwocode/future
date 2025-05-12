@@ -1,10 +1,12 @@
 {
-  "symbols": ["ETHUSDT", "SOLUSDT"],
-  "qty_usdt": 2,
+  "symbols": ["ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT"],
+  "qty_usdt": 1,
   "leverage": {
- 
-    "ETHUSDT": 10,
-    "SOLUSDT": 10
+
+    "XRPUSDT": 75,
+    "ETHUSDT": 125,
+    "SOLUSDT": 100,
+    "BNBUSDT": 75
 
   },
   "telegram_token": "7343242058:AAFAPokz2rYojvHukGcLD-Ds8M_kkuazIVs",
