@@ -1,0 +1,12 @@
+{
+  "symbols": ["ETHUSDT", "SOLUSDT"],
+  "qty_usdt": 2,
+  "leverage": {
+ 
+    "ETHUSDT": 10,
+    "SOLUSDT": 10
+
+  },
+  "telegram_token": "7343242058:AAFAPokz2rYojvHukGcLD-Ds8M_kkuazIVs",
+  "telegram_chat_id": "7043085742"
+}
