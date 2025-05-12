@@ -17,8 +17,8 @@ telegram_token = config['telegram_token']
 telegram_chat_id = config['telegram_chat_id']
 
 # Inisialisasi client Binance
-client = Client(api_key='Vwyo2haf69P3VNyPUAzUfcC2IpOVikd2ghvQo73rPxeZZ9KNsrK7qYBC65IK4bkC',
-                api_secret='vfCiCQFsLIShMqbjko8TC5rIJlFnSflhTJW4h35hsMwqPJKvXxPHLFyNtCgdOCra')
+client = Client(api_key='BINANCE_API_KEY',
+                api_secret='BINANCE_API_KEY_SECRET')
 
 def send_telegram_message(message):
     url = f'https://api.telegram.org/bot{telegram_token}/sendMessage'
