@@ -27,6 +27,6 @@ Jalankan pip install python-binance numpy requests
 ### 3. Hal yang perlu di ganti
 1.buka kode bot_trading dan ganti BINANCE_API_KEY dan BINANCE_API_KEY_SECRET menggunakan API key mu
 client = Client(api_key='BINANCE_API_KEY',
-                api_secret='BINANCE_API_KEY_SECRET')
+                api_secret='BINANCE_API_KEY_SECRET')<br>
 2.untuk edit leverage dan lainnya seperti bot telegram bisa di config.json
 ## DONE
